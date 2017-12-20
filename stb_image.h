@@ -674,6 +674,7 @@ static int stbi__sse2_available(void)
 
 #if defined(__APPLE__) && !defined(STBI_NO_JPEG)
 #define STBI_APPLE_IMAGE
+// To resolve link dependencies, link with: -framework Foundation -framework CoreGraphics -framework ImageIO
 #include <ImageIO/ImageIO.h>
 static stbi_uc *stbi_apple_load(char const *filename, int *x, int *y, int *comp, int req_comp);
 #endif
