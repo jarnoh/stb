@@ -447,6 +447,9 @@ STBIDEF int   stbi_zlib_decode_buffer(char *obuffer, int olen, const char *ibuff
 STBIDEF char *stbi_zlib_decode_noheader_malloc(const char *buffer, int len, int *outlen);
 STBIDEF int   stbi_zlib_decode_noheader_buffer(char *obuffer, int olen, const char *ibuffer, int ilen);
 
+#ifdef STBI_APPLE_IMAGE
+STBIDEF stbi_uc *stbi_apple_load(char const *filename, int *x, int *y, int *comp, int req_comp);
+#endif
 
 #ifdef __cplusplus
 }
@@ -671,6 +674,11 @@ static int stbi__sse2_available(void)
 
 #ifndef STBI_SIMD_ALIGN
 #define STBI_SIMD_ALIGN(type, name) type name
+#endif
+
+#if defined(__APPLE__) && !defined(STBI_NO_JPEG)
+#define STBI_APPLE_IMAGE
+#include <CoreGraphics/CoreGraphics.h>
 #endif
 
 ///////////////////////////////////////////////
@@ -1130,8 +1138,12 @@ static FILE *stbi__fopen(char const *filename, char const *mode)
 
 STBIDEF stbi_uc *stbi_load(char const *filename, int *x, int *y, int *comp, int req_comp)
 {
+    unsigned char *result;
+#ifdef STBI_APPLE_IMAGE
+    result = stbi_apple_load(filename, x, y, comp, req_comp);
+    if(result) return result;
+#endif
    FILE *f = stbi__fopen(filename, "rb");
-   unsigned char *result;
    if (!f) return stbi__errpuc("can't fopen", "Unable to open file");
    result = stbi_load_from_file(f,x,y,comp,req_comp);
    fclose(f);
@@ -6964,6 +6976,65 @@ STBIDEF int stbi_info_from_callbacks(stbi_io_callbacks const *c, void *user, int
    stbi__start_callbacks(&s, (stbi_io_callbacks *) c, user);
    return stbi__info_main(&s,x,y,comp);
 }
+
+#ifdef STBI_APPLE_IMAGE
+
+// TODO maybe memory loading as well?
+STBIDEF stbi_uc *stbi_apple_load(char const *filename, int *x, int *y, int *comp, int req_comp)
+{
+    *x=*y=*comp=0;
+    
+    if(req_comp!=0 && req_comp!=1 && req_comp!=4) return NULL; // not supported
+    
+    CFURLRef url = CFURLCreateFromFileSystemRepresentation(NULL, (const UInt8*)filename, strlen(filename), 0);
+    
+    if(!url) return NULL;
+    
+    CGImageSourceRef source = CGImageSourceCreateWithURL(url, NULL);
+    CFRelease(url);
+    
+    if(!source) return NULL;
+    
+    if (CFStringCompare(CGImageSourceGetType(source), CFSTR("public.png"), 0) == kCFCompareEqualTo)
+    {
+        // ios png decoder is 30% slower than stb_image, and it does not support non-premultiplied alpha
+        // let's use stb_image
+        CFRelease(source);
+        return NULL;
+    }
+    
+    CGImageRef newImage = CGImageSourceCreateImageAtIndex(source, 0, NULL);
+    CFRelease(source);
+    
+    if(!newImage) return NULL;
+
+    int w = (int)CGImageGetWidth(newImage);
+    int h = (int)CGImageGetHeight(newImage);
+    
+    if(w==0 || h==0) return NULL;
+    
+    const int bytesPerPixel = (req_comp==1 ? 1 : 4);
+    const int bitmapInfo = (req_comp==1 ? kCGImageAlphaNone : kCGImageAlphaNoneSkipLast | kCGBitmapByteOrder32Big);
+    
+    unsigned char *image = (unsigned char*)STBI_MALLOC(w*h*bytesPerPixel);
+    
+    CGColorSpaceRef colorSpace = req_comp==1 ? CGColorSpaceCreateDeviceGray() : CGColorSpaceCreateDeviceRGB();
+    CGContextRef context = CGBitmapContextCreate(image, w, h, 8, w * bytesPerPixel, colorSpace, bitmapInfo);
+    
+    CGContextDrawImage(context, CGRectMake(0, 0, w, h), newImage);
+    
+    CFRelease(newImage);
+    
+    CGColorSpaceRelease(colorSpace);
+    CFRelease(context);
+    
+    *x=w;
+    *y=h;
+    *comp=(req_comp==1 ? 1 : 3);
+    
+    return image;
+}
+#endif
 
 #endif // STB_IMAGE_IMPLEMENTATION
 
