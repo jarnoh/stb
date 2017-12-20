@@ -447,10 +447,6 @@ STBIDEF int   stbi_zlib_decode_buffer(char *obuffer, int olen, const char *ibuff
 STBIDEF char *stbi_zlib_decode_noheader_malloc(const char *buffer, int len, int *outlen);
 STBIDEF int   stbi_zlib_decode_noheader_buffer(char *obuffer, int olen, const char *ibuffer, int ilen);
 
-#ifdef STBI_APPLE_IMAGE
-STBIDEF stbi_uc *stbi_apple_load(char const *filename, int *x, int *y, int *comp, int req_comp);
-#endif
-
 #ifdef __cplusplus
 }
 #endif
@@ -678,7 +674,8 @@ static int stbi__sse2_available(void)
 
 #if defined(__APPLE__) && !defined(STBI_NO_JPEG)
 #define STBI_APPLE_IMAGE
-#include <CoreGraphics/CoreGraphics.h>
+#include <ImageIO/ImageIO.h>
+static stbi_uc *stbi_apple_load(char const *filename, int *x, int *y, int *comp, int req_comp);
 #endif
 
 ///////////////////////////////////////////////
@@ -6980,7 +6977,7 @@ STBIDEF int stbi_info_from_callbacks(stbi_io_callbacks const *c, void *user, int
 #ifdef STBI_APPLE_IMAGE
 
 // TODO maybe memory loading as well?
-STBIDEF stbi_uc *stbi_apple_load(char const *filename, int *x, int *y, int *comp, int req_comp)
+static stbi_uc *stbi_apple_load(char const *filename, int *x, int *y, int *comp, int req_comp)
 {
     *x=*y=*comp=0;
     
